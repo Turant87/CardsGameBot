@@ -1,3 +1,4 @@
+
 from random import choice
 import telebot
 
@@ -11,8 +12,10 @@ users_data = {}
 def start(message):
     keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     start_button = telebot.types.KeyboardButton('Начать игру')
-    keybord.add(start_button)
-    bot.send_message(message.chat.id, 'Добро пожаловать в игру! Нажмите "Начать игру" для начала.',
+    stop_button = telebot.types.KeyboardButton('Остановить игру')
+    keybord.add(start_button, stop_button)
+    bot.send_message(message.chat.id,
+                     'Добро пожаловать в игру! Нажмите "Начать игру" для начала или "Остановить игру" для завершения.',
                      reply_markup=keybord)
 
 
@@ -24,6 +27,13 @@ def choose_difficulty(message):
     keybord.row('3 - Угадать значение карты и масть')
     bot.send_message(message.chat.id, 'Выберите уровень сложности:', reply_markup=keybord)
     bot.register_next_step_handler(message, set_difficulty)
+
+
+@bot.message_handler(func=lambda message: message.text == 'Остановить игру')
+def stop_game(message):
+    if message.chat.id in users_data:
+        del users_data[message.chat.id]
+    bot.send_message(message.chat.id, 'Игра остановлена. Нажмите /start для начала новой игры.')
 
 
 def set_difficulty(message):
@@ -67,57 +77,34 @@ def play_round(message):
     if user_data['difficulty'] == '1':
         keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
         keybord.row('🟥 Красный', '⬛ Черный')
+        keybord.row('Остановить игру')
         bot.send_message(message.chat.id, 'Введите цвет масти карты (Черный или Красный):', reply_markup=keybord)
+        bot.register_next_step_handler(message, compare_answer)
     elif user_data['difficulty'] == '2':
-        bot.send_message(message.chat.id, 'Введите цвет масти карты (Черный или Красный):')
+        keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keybord.row('🟥 Красный', '⬛ Черный')
+        keybord.row('Остановить игру')
+        bot.send_message(message.chat.id, 'Введите цвет масти карты (Черный или Красный):', reply_markup=keybord)
+        bot.register_next_step_handler(message, compare_color)
     elif user_data['difficulty'] == '3':
-        bot.send_message(message.chat.id, 'Введите значение карты (2, 3, 4, 5, 6, 7, 8, 9, 10, в, д, к, т):')
-
-    bot.register_next_step_handler(message, compare_answer)
+        keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        for number in ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'в', 'д', 'к', 'т']:
+            keybord.add(number)
+        keybord.row('Остановить игру')
+        bot.send_message(message.chat.id, 'Введите значение карты:', reply_markup=keybord)
+        bot.register_next_step_handler(message, compare_number)
 
 
 def compare_answer(message):
     user_data = users_data[message.chat.id]
     card_number, card_suit = user_data['current_card']
-    difficulty = user_data['difficulty']
-
-    if difficulty == '1':
-        if (message.text in ['🟥', 'красный'] and card_suit in ['бубны', 'черви']) or \
-                (message.text in ['⬛', 'черный'] and card_suit in ['пики', 'трефы']):
-            user_data['score'] += 1
-            bot.send_message(message.chat.id, f'Вы угадали! Карта была - {card_number} {card_suit}')
-        else:
-            bot.send_message(message.chat.id, f'Вы не угадали, карта была - {card_number} {card_suit}')
-
-    elif difficulty == '2':
-        bot.send_message(message.chat.id, 'Введите значение карты (2, 3, 4, 5, 6, 7, 8, 9, 10, в, д, к, т):')
-        bot.register_next_step_handler(message, compare_number)
-
-    elif difficulty == '3':
-        player_number = message.text.strip().lower()
-        if player_number == card_number:
-            bot.send_message(message.chat.id, 'Введите масть карты (бубны, черви, пики, трефы):')
-            bot.register_next_step_handler(message, compare_suit)
-        else:
-            bot.send_message(message.chat.id, f'Вы не угадали значение карты. Карта была - {card_number} {card_suit}')
-            next_round(message)
-
-
-def compare_number(message):
-    user_data = users_data[message.chat.id]
-    card_number, card_suit = user_data['current_card']
-    player_number = message.text.strip().lower()
-
-    if player_number == card_number:
-        if user_data['difficulty'] == '2':
-            bot.send_message(message.chat.id, 'Введите цвет масти карты (Черный или Красный):')
-            bot.register_next_step_handler(message, compare_color)
-        elif user_data['difficulty'] == '3':
-            bot.send_message(message.chat.id, 'Введите масть карты (бубны, черви, пики, трефы):')
-            bot.register_next_step_handler(message, compare_suit)
+    if (message.text in ['🟥 Красный', 'красный'] and card_suit in ['бубны', 'черви']) or \
+            (message.text in ['⬛ Черный', 'черный'] and card_suit in ['пики', 'трефы']):
+        user_data['score'] += 1
+        bot.send_message(message.chat.id, f'Вы угадали! Карта была - {card_number} {card_suit}')
     else:
-        bot.send_message(message.chat.id, f'Вы не угадали значение карты. Карта была - {card_number} {card_suit}')
-        next_round(message)
+        bot.send_message(message.chat.id, f'Вы не угадали, карта была - {card_number} {card_suit}')
+    next_round(message)
 
 
 def compare_color(message):
@@ -125,14 +112,41 @@ def compare_color(message):
     card_number, card_suit = user_data['current_card']
     player_suit_color = message.text.strip().lower()
 
-    if (player_suit_color == 'красный' and card_suit in ['бубны', 'черви']) or \
-            (player_suit_color == 'черный' and card_suit in ['пики', 'трефы']):
-        user_data['score'] += 2
-        bot.send_message(message.chat.id, f'Вы угадали! Карта была - {card_number} {card_suit}')
+    if (player_suit_color in ['🟥 красный', 'красный'] and card_suit in ['бубны', 'черви']) or \
+            (player_suit_color in ['⬛ черный', 'черный'] and card_suit in ['пики', 'трефы']):
+        keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        for number in ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'в', 'д', 'к', 'т']:
+            keybord.add(number)
+        keybord.row('Остановить игру')
+        bot.send_message(message.chat.id, 'Введите значение карты:', reply_markup=keybord)
+        bot.register_next_step_handler(message, compare_number)
     else:
         bot.send_message(message.chat.id, f'Вы не угадали цвет масти карты. Карта была - {card_number} {card_suit}')
+        next_round(message)
 
-    next_round(message)
+
+def compare_number(message):
+    user_data = users_data[message.chat.id]
+    card_number, card_suit = user_data['current_card']
+    player_number = message.text.strip().lower()
+
+    if user_data['difficulty'] == '2':
+        if player_number == card_number:
+            user_data['score'] += 2
+            bot.send_message(message.chat.id, f'Вы угадали! Карта была - {card_number} {card_suit}')
+        else:
+            bot.send_message(message.chat.id, f'Вы не угадали значение карты. Карта была - {card_number} {card_suit}')
+        next_round(message)
+    elif user_data['difficulty'] == '3':
+        if player_number == card_number:
+            keybord = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+            keybord.row('бубны', 'черви', 'пики', 'трефы')
+            keybord.row('Остановить игру')
+            bot.send_message(message.chat.id, 'Введите масть карты (бубны, черви, пики, трефы):', reply_markup=keybord)
+            bot.register_next_step_handler(message, compare_suit)
+        else:
+            bot.send_message(message.chat.id, f'Вы не угадали значение карты. Карта была - {card_number} {card_suit}')
+            next_round(message)
 
 
 def compare_suit(message):
@@ -159,5 +173,3 @@ def next_round(message):
 
 
 bot.infinity_polling()
-
-
